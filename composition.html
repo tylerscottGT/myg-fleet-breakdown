@@ -421,10 +421,13 @@
 
         Promise.all([
           apiGet('Device'),
-          apiGet('IoxAddOn')
+          apiGet('IoxAddOn'),
+          apiGet('MediaDevice').catch(function(e) { dbg('MediaDevice error: '+e); return []; })
         ]).then(function(results) {
-          var devices    = results[0];
-          var ioxRecords = results[1];
+          var devices        = results[0];
+          var ioxRecords     = results[1];
+          var mediaDevices   = results[2];
+          dbg('MediaDevice raw: '+JSON.stringify(mediaDevices));
 
           // Build camera map: deviceId → camera label from IoxAddOn pairings
           _cameraMap = {};

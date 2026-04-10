@@ -177,8 +177,8 @@
       if (name.includes('focus plus') || name.includes('focusplus') || name.includes('go focus')) return 'GO Focus Plus';
       if (name.includes('surfsight') || name.includes('ai-12') || name.includes('ai12')) return 'Surfsight';
       if (name.includes('lytx')) return 'Lytx';
-      // Fall back to the deviceType string itself, or the device name
-      return type || device.name || 'Camera';
+      // Fall back to device name (skip 'None' as it's meaningless as a label)
+      return (type && type !== 'None') ? type : (device.name || 'Camera');
     }
 
     function getMakeFromVIN(vin) {
@@ -287,16 +287,20 @@
         var chartType = _activeFilter.chartType;
         var label = _activeFilter.label;
 
+        // Valid trackers: must have valid SN and not be OldGeotab/inactive
+        var validTrackers = devices.filter(function(d) {
+          return !isCameraDevice(d) && hasValidSerialNumber(d) && d.deviceType !== 'OldGeotab' && d.isActive !== false;
+        });
+
         if (chartType === 'makemodel') {
-          return devices.filter(function(d) { return !isCameraDevice(d) && getMakeModel(d) === label; });
+          return validTrackers.filter(function(d) { return getMakeModel(d) === label; });
         } else if (chartType === 'hardware') {
-          return devices.filter(function(d) { return !isCameraDevice(d) && normalizeDeviceType(d.deviceType||'Unknown') === label; });
+          return validTrackers.filter(function(d) { return normalizeDeviceType(d.deviceType||'Unknown') === label; });
         } else if (chartType === 'camera') {
           if (label === 'No Camera') {
-            var trackers = devices.filter(function(d) { return !isCameraDevice(d); });
-            var cameras = devices.filter(function(d) { return isCameraDevice(d); });
-            var uncamCount = Math.max(0, trackers.length - cameras.length);
-            return trackers.slice(0, uncamCount);
+            var cams = devices.filter(function(d) { return isCameraDevice(d); });
+            var uncamCount = Math.max(0, validTrackers.length - cams.length);
+            return validTrackers.slice(0, uncamCount);
           } else {
             return devices.filter(function(d) { return isCameraDevice(d) && getCameraLabel(d) === label; });
           }

@@ -165,13 +165,7 @@
     }
 
     function getCameraSystem(device) {
-      // Checks device name — camera devices in MyGeotab are named e.g. "Camera - GO Focus Plus"
-      var haystack = ((device.name || '') + ' ' + (device.comment || '')).toLowerCase();
-      if (haystack.indexOf('surfsight') !== -1) return 'Surfsight';
-      if (haystack.indexOf('focus plus') !== -1 || haystack.indexOf('focusplus') !== -1) return 'GO Focus Plus';
-      if (haystack.indexOf('lytx') !== -1) return 'Lytx';
-      if (haystack.indexOf('netradyne') !== -1) return 'Netradyne';
-      return 'No Camera';
+      return _cameraMap[device.id] || 'No Camera';
     }
 
     function getMakeFromVIN(vin) {
@@ -211,7 +205,7 @@
     }
 
     geotab.addin['composition'] = function() {
-      var _api, _allDevices = [], _showVehicles = true, _showTrailers = true, _readyOnly = false;
+      var _api, _allDevices = [], _cameraMap = {}, _showVehicles = true, _showTrailers = true, _readyOnly = false;
       var _activeFilter = null; // { chartType, label }
       var _charts = {};
 
@@ -282,15 +276,15 @@
         var chartType = _activeFilter.chartType;
         var label = _activeFilter.label;
 
-        var validAll = devices.filter(function(d) { return d.deviceType !== 'OldGeotab' && d.isActive !== false; });
-        var validTrackers = validAll.filter(function(d) { return d.deviceType !== 'None' && hasValidSerialNumber(d); });
+        var validAll = devices.filter(function(d) { return d.deviceType !== 'OldGeotab' && d.deviceType !== 'None' && d.isActive !== false; });
+        var validTrackers = validAll.filter(function(d) { return hasValidSerialNumber(d); });
 
         if (chartType === 'makemodel') {
           return validTrackers.filter(function(d) { return getMakeModel(d) === label; });
         } else if (chartType === 'hardware') {
           return validTrackers.filter(function(d) { return normalizeDeviceType(d.deviceType||'Unknown') === label; });
         } else if (chartType === 'camera') {
-          return validAll.filter(function(d) { return getCameraSystem(d) === label; });
+          return validTrackers.filter(function(d) { return getCameraSystem(d) === label; });
         }
         return [];
       }
@@ -371,9 +365,11 @@
         document.getElementById('charts-row').style.display = 'grid';
         document.getElementById('loading-msg').style.display = 'none';
 
-        // Valid devices for all charts: exclude OldGeotab and inactive
+        // Valid devices for all charts: exclude OldGeotab, None (untracked trailers), and inactive
         var validDevices = devices.filter(function(d) {
-          return d.deviceType !== 'OldGeotab' && d.isActive !== false;
+          return d.deviceType !== 'OldGeotab' &&
+                 d.deviceType !== 'None' &&
+                 d.isActive !== false;
         });
 
         // Tracker devices: exclude 'None' type (cameras) and require valid SN
@@ -396,10 +392,9 @@
           hwCounts[hw] = (hwCounts[hw] || 0) + 1;
         });
 
-        // Camera Systems: run getCameraSystem on ALL valid devices
-        // 'None' type devices are camera devices named e.g. "Camera - GO Focus Plus"
+        // Camera Systems: look up each tracker in the IoxAddOn camera map
         var cameraCounts = {};
-        validDevices.forEach(function(d) {
+        trackers.forEach(function(d) {
           var cam = getCameraSystem(d);
           cameraCounts[cam] = (cameraCounts[cam] || 0) + 1;
         });
@@ -422,10 +417,28 @@
         dbg('────────────────────────────');
         dbg('loadData() triggered');
 
-        apiGet('Device').then(function(devices) {
-          // Store everything — per-chart filters handle tracker vs camera separation
+        Promise.all([
+          apiGet('Device'),
+          apiGet('IoxAddOn')
+        ]).then(function(results) {
+          var devices    = results[0];
+          var ioxRecords = results[1];
+
+          // Build camera map: deviceId → camera label from IoxAddOn pairings
+          _cameraMap = {};
+          ioxRecords.forEach(function(iox) {
+            var devId = iox.device && iox.device.id;
+            var name  = (iox.name || '').toLowerCase();
+            if (!devId) return;
+            if (name.indexOf('surfsight') !== -1)                              _cameraMap[devId] = 'Surfsight';
+            else if (name.indexOf('focus plus') !== -1 || name.indexOf('focusplus') !== -1) _cameraMap[devId] = 'GO Focus Plus';
+            else if (name.indexOf('lytx') !== -1)                              _cameraMap[devId] = 'Lytx';
+            else if (name.indexOf('netradyne') !== -1)                         _cameraMap[devId] = 'Netradyne';
+            else if (name.indexOf('camera') !== -1)                            _cameraMap[devId] = iox.name;
+          });
+          dbg('IoxAddOn records: '+ioxRecords.length+', Camera pairings: '+Object.keys(_cameraMap).length);
+
           _allDevices = devices;
-          // Log device type inventory to debug
           var typeCount = {};
           devices.forEach(function(d) { var t = d.deviceType||'(none)'; typeCount[t]=(typeCount[t]||0)+1; });
           dbg('Device type inventory: '+JSON.stringify(typeCount));

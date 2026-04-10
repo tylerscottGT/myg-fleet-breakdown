@@ -164,6 +164,8 @@
       return false;
     }
 
+    var _cameraMap = {}; // deviceId → camera label, populated in loadData()
+
     function getCameraSystem(device) {
       return _cameraMap[device.id] || 'No Camera';
     }
@@ -205,7 +207,7 @@
     }
 
     geotab.addin['composition'] = function() {
-      var _api, _allDevices = [], _cameraMap = {}, _showVehicles = true, _showTrailers = true, _readyOnly = false;
+      var _api, _allDevices = [], _showVehicles = true, _showTrailers = true, _readyOnly = false;
       var _activeFilter = null; // { chartType, label }
       var _charts = {};
 

@@ -164,10 +164,10 @@
       return false;
     }
 
-    var _cameraMap = {}; // deviceId → camera label, populated in loadData()
+    var _cameraMap = {}; // GO device serialNumber → camera label, populated in loadData()
 
     function getCameraSystem(device) {
-      return _cameraMap[device.id] || 'No Camera';
+      return _cameraMap[device.serialNumber] || 'No Camera';
     }
 
     function getMakeFromVIN(vin) {
@@ -421,28 +421,26 @@
 
         Promise.all([
           apiGet('Device'),
-          apiGet('IoxAddOn'),
-          apiGet('MediaDevice').catch(function(e) { dbg('MediaDevice error: '+e); return []; })
+          fetch('https://media-services.geotab.com/api/DeviceMappings', {credentials:'include'})
+            .then(function(r) { return r.json(); })
+            .catch(function(e) { dbg('DeviceMappings error: '+e); return []; })
         ]).then(function(results) {
-          var devices        = results[0];
-          var ioxRecords     = results[1];
-          var mediaDevices   = results[2];
-          dbg('MediaDevice raw: '+JSON.stringify(mediaDevices));
+          var devices  = results[0];
+          var mappings = results[1];
 
-          // Build camera map: deviceId → camera label from IoxAddOn pairings
+          // Build camera map: GO device serialNumber → camera label
           _cameraMap = {};
-          ioxRecords.forEach(function(iox) {
-            var devId = iox.device && iox.device.id;
-            var name  = (iox.name || '').toLowerCase();
-            if (!devId) return;
-            if (name.indexOf('surfsight') !== -1)                              _cameraMap[devId] = 'Surfsight';
-            else if (name.indexOf('focus plus') !== -1 || name.indexOf('focusplus') !== -1) _cameraMap[devId] = 'GO Focus Plus';
-            else if (name.indexOf('lytx') !== -1)                              _cameraMap[devId] = 'Lytx';
-            else if (name.indexOf('netradyne') !== -1)                         _cameraMap[devId] = 'Netradyne';
-            else if (name.indexOf('camera') !== -1)                            _cameraMap[devId] = iox.name;
+          mappings.forEach(function(m) {
+            var sn      = m.associatedDeviceSerialNumber;
+            var model   = m.partnerMetaData && m.partnerMetaData.DeviceModel;
+            var partner = (m.partnerId || '').toLowerCase();
+            if (!sn) return;
+            var label = (partner === 'surfsight')
+              ? 'Surfsight' + (model ? ' ' + model : '')
+              : (model || m.partnerId || 'Camera');
+            _cameraMap[sn] = label;
           });
-          dbg('IoxAddOn records: '+ioxRecords.length+', Camera pairings: '+Object.keys(_cameraMap).length);
-          dbg('IoxAddOn raw: '+JSON.stringify(ioxRecords));
+          dbg('DeviceMappings: '+mappings.length+' records, Camera pairings: '+Object.keys(_cameraMap).length);
 
           _allDevices = devices;
           var typeCount = {};

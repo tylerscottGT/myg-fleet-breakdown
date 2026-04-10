@@ -439,6 +439,7 @@
             else if (name.indexOf('camera') !== -1)                            _cameraMap[devId] = iox.name;
           });
           dbg('IoxAddOn records: '+ioxRecords.length+', Camera pairings: '+Object.keys(_cameraMap).length);
+          dbg('IoxAddOn raw: '+JSON.stringify(ioxRecords));
 
           _allDevices = devices;
           var typeCount = {};

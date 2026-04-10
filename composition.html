@@ -142,10 +142,22 @@
       return true;
     }
 
+    // Known Geotab tracker device types — anything NOT in this list is treated as a camera/accessory
+    var TRACKER_TYPES = ['GO9','GO9B','GoAnywhere','GOAnywhere','GO8','GO7','GO6',
+                         'OldGeotab','CustomDevice','UnpluggedDevice','None',
+                         'CustomVehicleDevice','BaseDevice','GoDriveAssist'];
+
+    function isTrackerType(deviceType) {
+      return TRACKER_TYPES.indexOf(deviceType || '') !== -1;
+    }
+
     function isCameraDevice(device) {
+      // First: unknown device types (not in known tracker list) are cameras/accessories
+      if (!isTrackerType(device.deviceType)) return true;
+      // Second: check name/deviceType for camera keywords even on "None" type devices
       var type = (device.deviceType || '').toLowerCase();
       var name = (device.name || '').toLowerCase();
-      var patterns = ['focus','surfsight','lytx','netradyne','smartwitness','drivecam','samsara','mobileye','camera','dashcam','ai-12','ai12'];
+      var patterns = ['focus','surfsight','lytx','netradyne','smartwitness','drivecam','mobileye','camera','dashcam','ai-12','ai12'];
       for (var i = 0; i < patterns.length; i++) {
         if (type.includes(patterns[i]) || name.includes(patterns[i])) return true;
       }
@@ -153,12 +165,20 @@
     }
 
     function getCameraLabel(device) {
-      var type = (device.deviceType || '').toLowerCase();
+      var type = (device.deviceType || '');
+      var typeL = type.toLowerCase();
       var name = (device.name || '').toLowerCase();
-      if (type.includes('focusplus') || type.includes('focus plus') || name.includes('focus plus') || name.includes('focusplus')) return 'GO Focus Plus';
-      if (type.includes('surfsight') || name.includes('surfsight') || name.includes('ai-12') || name.includes('ai12')) return 'Surfsight';
-      if (type.includes('lytx') || name.includes('lytx')) return 'Lytx';
-      return 'Other Camera';
+      // deviceType-based
+      if (typeL.includes('focusplus') || typeL === 'gofocusplus') return 'GO Focus Plus';
+      if (typeL.includes('surfsight')) return 'Surfsight';
+      if (typeL.includes('lytx')) return 'Lytx';
+      if (typeL.includes('netradyne')) return 'Netradyne';
+      // name-based
+      if (name.includes('focus plus') || name.includes('focusplus') || name.includes('go focus')) return 'GO Focus Plus';
+      if (name.includes('surfsight') || name.includes('ai-12') || name.includes('ai12')) return 'Surfsight';
+      if (name.includes('lytx')) return 'Lytx';
+      // Fall back to the deviceType string itself, or the device name
+      return type || device.name || 'Camera';
     }
 
     function getMakeFromVIN(vin) {
@@ -360,9 +380,16 @@
         document.getElementById('charts-row').style.display = 'grid';
         document.getElementById('loading-msg').style.display = 'none';
 
-        // Separate trackers vs cameras
-        var trackers = devices.filter(function(d) { return !isCameraDevice(d); });
+        // Cameras: any device that isn't a known tracker type (no SN filter — cameras/accessories may lack one)
         var cameras = devices.filter(function(d) { return isCameraDevice(d); });
+        // Trackers: known tracker types with valid SN, not archived/old
+        var trackers = devices.filter(function(d) {
+          return !isCameraDevice(d)
+            && hasValidSerialNumber(d)
+            && d.deviceType !== 'OldGeotab'
+            && d.isActive !== false;
+        });
+        dbg('Trackers: '+trackers.length+', Cameras: '+cameras.length);
 
         // Make/Model (trackers only)
         var makeModelCounts = {};
@@ -406,14 +433,13 @@
         dbg('loadData() triggered');
 
         apiGet('Device').then(function(devices) {
-          // Filter: tracked only, exclude archived/old
-          _allDevices = devices.filter(function(d) {
-            if (!hasValidSerialNumber(d)) { dbg('Exclude (no SN): '+d.name); return false; }
-            if (d.deviceType === 'OldGeotab') { dbg('Exclude (OldGeotab): '+d.name); return false; }
-            if (d.isActive === false) { dbg('Exclude (inactive): '+d.name); return false; }
-            return true;
-          });
-          dbg('Loaded '+_allDevices.length+' tracked devices (filtered from '+devices.length+' total)');
+          // Store everything — per-chart filters handle tracker vs camera separation
+          _allDevices = devices;
+          // Log device type inventory to debug
+          var typeCount = {};
+          devices.forEach(function(d) { var t = d.deviceType||'(none)'; typeCount[t]=(typeCount[t]||0)+1; });
+          dbg('Device type inventory: '+JSON.stringify(typeCount));
+          dbg('Loaded '+_allDevices.length+' total devices');
           render();
         }).catch(function(err) {
           loadEl.textContent = 'Error loading data: '+err;

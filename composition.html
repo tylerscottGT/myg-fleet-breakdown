@@ -6,14 +6,10 @@
 </head>
 <body style="margin:0;padding:0;background:#F2F5F7;">
 
-  <!-- ── App shell ───────────────────────────────────────────────── -->
   <div id="app" style="padding:24px 28px;font-family:sans-serif;">
-
-    <!-- Header row -->
+    <!-- Header -->
     <div id="hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-      <div id="hdr-title" style="font-size:20px;font-weight:700;color:#25477B;">
-        Fleet Technology Dashboard
-      </div>
+      <div style="font-size:20px;font-weight:700;color:#25477B;">Fleet Technology Dashboard</div>
       <div id="filter-bar" style="display:flex;align-items:center;gap:16px;font-size:14px;">
         <span style="color:#4E677E;font-weight:600;">Show:</span>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;color:#1F2833;">
@@ -30,12 +26,10 @@
       </div>
     </div>
 
-    <!-- Loading state -->
-    <div id="loading-msg" style="text-align:center;padding:40px;color:#4E677E;font-size:15px;">
-      Loading fleet data…
-    </div>
+    <!-- Loading -->
+    <div id="loading-msg" style="text-align:center;padding:40px;color:#4E677E;font-size:15px;">Loading fleet data…</div>
 
-    <!-- Charts row (hidden until data loads) -->
+    <!-- Charts -->
     <div id="charts-row" style="display:none;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
       <div class="ztab-card">
         <div class="ztab-card-title">Make/Model Composition</div>
@@ -51,152 +45,145 @@
       </div>
     </div>
 
-    <!-- Section divider -->
-    <div id="section-divider" style="display:none;height:3px;background:#25477B;border-radius:2px;margin:0 0 24px 0;"></div>
+    <!-- Divider + filter header (hidden until chart clicked) -->
+    <div id="filter-header" style="display:none;margin:0 0 16px 0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#fff;border:1px solid #D9E1E8;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size:14px;font-weight:700;color:#25477B;" id="filter-label">Showing: All</div>
+        <button id="btn-clear-filter" style="background:#E74C3C;color:#fff;border:none;border-radius:4px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">
+          Clear Filter
+        </button>
+      </div>
+    </div>
 
-    <!-- Device list -->
-    <div id="device-list"></div>
+    <!-- Device list (hidden until chart clicked) -->
+    <div id="device-list" style="display:none;"></div>
   </div>
 
-  <!-- ── Debug bar (fixed bottom) ────────────────────────────────── -->
+  <!-- Debug bar -->
   <div id="debug-bar" style="position:fixed;bottom:0;left:0;right:0;text-align:center;z-index:9999;">
-    <button id="btn-toggle-debug"
-      style="border:none;padding:5px 18px;cursor:pointer;font-size:12px;border-radius:4px 4px 0 0;margin:0 3px;background:#E74C3C;color:#fff;font-weight:600;">
+    <button id="btn-toggle-debug" style="border:none;padding:5px 18px;cursor:pointer;font-size:12px;border-radius:4px 4px 0 0;margin:0 3px;background:#E74C3C;color:#fff;font-weight:600;">
       Toggle Debug Log
     </button>
-    <button id="btn-copy-debug"
-      style="border:none;padding:5px 18px;cursor:pointer;font-size:12px;border-radius:4px 4px 0 0;margin:0 3px;background:#F5A623;color:#fff;font-weight:600;">
+    <button id="btn-copy-debug" style="border:none;padding:5px 18px;cursor:pointer;font-size:12px;border-radius:4px 4px 0 0;margin:0 3px;background:#F5A623;color:#fff;font-weight:600;">
       Copy Debug Data
     </button>
-    <pre id="debug-log"
-      style="display:none;background:#1e1e1e;color:#0f0;padding:12px;margin:0;max-height:200px;overflow-y:auto;text-align:left;font-size:11px;font-family:monospace;"></pre>
+    <pre id="debug-log" style="display:none;background:#1e1e1e;color:#0f0;padding:12px;margin:0;max-height:200px;overflow-y:auto;text-align:left;font-size:11px;font-family:monospace;"></pre>
   </div>
 
   <script>
-    // ── Zenith design tokens ────────────────────────────────────────
     var Z = {
-      brand:       '#25477B',
-      interactive: '#0069BF',
-      textPrimary: '#1F2833',
-      textSecond:  '#4E677E',
-      bg:          '#F2F5F7',
-      border:      '#D9E1E8',
-      font:        "'Nunito Sans', sans-serif"
+      brand: '#25477B', interactive: '#0069BF', textPrimary: '#1F2833',
+      textSecond: '#4E677E', bg: '#F2F5F7', border: '#D9E1E8',
+      font: "'Nunito Sans', sans-serif"
+    };
+    var PALETTE = ['#25477B','#0069BF','#4E99D4','#8BC4EA','#2E7D32','#66BB6A','#F5A623','#9B59B6','#E74C3C','#1ABC9C'];
+
+    // WMI lookup for VIN → Make
+    var WMI_MAP = {
+      '1G1':'Chevrolet','1G4':'Buick','1G6':'Cadillac','1GC':'Chevrolet','1GT':'GMC',
+      '1FA':'Ford','1FB':'Ford','1FC':'Ford','1FD':'Ford','1FM':'Ford','1FT':'Ford','2FM':'Ford','3FM':'Ford','3FA':'Ford',
+      '1HG':'Honda','2HG':'Honda','1J4':'Jeep','1J8':'Jeep','2J4':'Jeep','3J4':'Jeep',
+      '1N4':'Nissan','1N6':'Nissan','5N1':'Nissan','JN1':'Nissan','JN8':'Nissan',
+      '1YV':'Mazda','JM1':'Mazda','JM3':'Mazda','3MZ':'Mazda',
+      '1B3':'Dodge','1B7':'Dodge','2B3':'Dodge','1C4':'Chrysler','1C6':'Ram','1C3':'Chrysler','2C3':'Chrysler',
+      '1VW':'Volkswagen','3VW':'Volkswagen','WVW':'Volkswagen',
+      '4T1':'Toyota','4T3':'Toyota','JTD':'Toyota','JTG':'Toyota','JTE':'Toyota','2T1':'Toyota','2T2':'Lexus',
+      '1L1':'Lincoln','1LN':'Lincoln','1ZV':'Ford',
+      '4S3':'Subaru','JF1':'Subaru','JF2':'Subaru',
+      '19U':'Acura','JH4':'Acura','5FN':'Honda','5J6':'Honda','JHM':'Honda',
+      'WBA':'BMW','WBS':'BMW','WBY':'BMW',
+      'WDB':'Mercedes-Benz','WDD':'Mercedes-Benz','WDC':'Mercedes-Benz',
+      'WAU':'Audi','WA1':'Audi','TRU':'Audi','WP0':'Porsche','WP1':'Porsche',
+      'KMH':'Hyundai','KNA':'Kia','5NP':'Hyundai','5NM':'Hyundai',
+      'SAL':'Land Rover','SAJ':'Jaguar','ZAR':'Alfa Romeo','ZFF':'Ferrari','YV1':'Volvo','YV2':'Volvo'
     };
 
-    // Zenith-aligned palette for pie slices
-    var PALETTE = [
-      '#25477B','#0069BF','#4E99D4','#8BC4EA',
-      '#2E7D32','#66BB6A','#F5A623','#9B59B6',
-      '#E74C3C','#1ABC9C'
-    ];
-
-    // ── Inject Zenith styles ────────────────────────────────────────
-    // Called from initialize() so MyGeotab head-scrubbing doesn't strip it
     function injectStyles() {
-      // Nunito Sans font
       var fontLink = document.createElement('link');
-      fontLink.rel  = 'stylesheet';
+      fontLink.rel = 'stylesheet';
       fontLink.href = 'https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&display=swap';
       document.head.appendChild(fontLink);
 
       var style = document.createElement('style');
       style.textContent = [
-        'body { font-family:' + Z.font + '; color:' + Z.textPrimary + '; }',
-
-        /* Cards */
-        '.ztab-card { background:#fff; border:1px solid ' + Z.border + '; border-radius:8px;',
-        '  padding:20px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }',
-        '.ztab-card-title { font-size:13px; font-weight:700; color:' + Z.textPrimary + ';',
-        '  margin-bottom:14px; text-align:center; letter-spacing:0.2px; }',
-
-        /* Hardware groups */
+        'body { font-family:'+Z.font+'; color:'+Z.textPrimary+'; }',
+        '.ztab-card { background:#fff; border:1px solid '+Z.border+'; border-radius:8px; padding:20px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }',
+        '.ztab-card-title { font-size:13px; font-weight:700; color:'+Z.textPrimary+'; margin-bottom:14px; text-align:center; letter-spacing:0.2px; }',
         '.hw-group { margin-bottom:28px; }',
-        '.hw-group-title { font-size:13px; font-weight:700; color:' + Z.brand + ';',
-        '  margin-bottom:10px; padding-bottom:6px;',
-        '  border-bottom:2px solid ' + Z.border + '; }',
+        '.hw-group-title { font-size:13px; font-weight:700; color:'+Z.brand+'; margin-bottom:10px; padding-bottom:6px; border-bottom:2px solid '+Z.border+'; }',
         '.device-cards { display:flex; flex-wrap:wrap; gap:12px; }',
-
-        /* Device cards */
-        '.device-card { background:#fff; border:1px solid ' + Z.border + '; border-radius:8px;',
-        '  padding:14px 16px; min-width:200px; box-shadow:0 1px 3px rgba(0,0,0,0.05);',
-        '  transition:box-shadow 0.15s ease; }',
+        '.device-card { background:#fff; border:1px solid '+Z.border+'; border-radius:8px; padding:14px 16px; min-width:200px; box-shadow:0 1px 3px rgba(0,0,0,0.05); transition:box-shadow 0.15s ease; }',
         '.device-card:hover { box-shadow:0 3px 10px rgba(0,105,191,0.12); }',
-        '.device-card-name { font-weight:700; color:' + Z.interactive + '; margin-bottom:8px; font-size:14px; }',
-        '.device-card-row { font-size:12px; color:' + Z.textSecond + '; margin-bottom:3px; line-height:1.5; }',
-        '.device-card-row b { color:' + Z.textPrimary + '; font-weight:600; }',
-
-        /* Empty state */
-        '.empty-state { text-align:center; padding:32px; color:' + Z.textSecond + ';',
-        '  font-size:14px; font-style:italic; }',
-
-        /* Responsive breakpoint */
+        '.device-card-name { font-weight:700; color:'+Z.interactive+'; margin-bottom:8px; font-size:14px; }',
+        '.device-card-row { font-size:12px; color:'+Z.textSecond+'; margin-bottom:3px; line-height:1.5; }',
+        '.device-card-row b { color:'+Z.textPrimary+'; font-weight:600; }',
+        '.empty-state { text-align:center; padding:32px; color:'+Z.textSecond+'; font-size:14px; font-style:italic; }',
         '@media (max-width:900px) { #charts-row { grid-template-columns:1fr !important; } }'
       ].join('\n');
       document.head.appendChild(style);
     }
 
-    // ── Debug logger ────────────────────────────────────────────────
     var _debugLines = [];
     function dbg(msg) {
       _debugLines.push(msg);
       var el = document.getElementById('debug-log');
       if (el) {
-        var ts = new Date().toISOString().substring(11, 23);
-        el.textContent += '[' + ts + '] ' + msg + '\n';
+        var ts = new Date().toISOString().substring(11,23);
+        el.textContent += '['+ts+'] '+msg+'\n';
         el.scrollTop = el.scrollHeight;
       }
-      console.log('[fleet-dash] ' + msg);
+      console.log('[fleet] '+msg);
     }
 
-    // ── Chart helper ────────────────────────────────────────────────
-    var _charts = {};
-    function renderPie(canvasId, counts) {
-      if (_charts[canvasId]) { _charts[canvasId].destroy(); }
-      var labels = Object.keys(counts);
-      var data   = labels.map(function(k) { return counts[k]; });
-
-      if (labels.length === 0) { labels = ['No data']; data = [0]; }
-
-      _charts[canvasId] = new Chart(document.getElementById(canvasId), {
-        type: 'pie',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: data,
-            backgroundColor: PALETTE,
-            borderWidth: 2,
-            borderColor: '#fff'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: {
-                font:     { family: Z.font, size: 12 },
-                color:    Z.textPrimary,
-                padding:  12,
-                boxWidth: 12
-              }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(ctx) {
-                  var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
-                  var pct   = total > 0 ? Math.round(ctx.parsed / total * 100) : 0;
-                  return ' ' + ctx.label + ': ' + ctx.parsed + ' (' + pct + '%)';
-                }
-              }
-            }
-          }
-        }
-      });
+    function hasValidSerialNumber(device) {
+      var sn = device.serialNumber || '';
+      if (!sn) return false;
+      if (/^[0\-]+$/.test(sn)) return false; // Placeholder like 000-000-0000
+      return true;
     }
 
-    // ── Device helpers ──────────────────────────────────────────────
+    function isCameraDevice(device) {
+      var type = (device.deviceType || '').toLowerCase();
+      var name = (device.name || '').toLowerCase();
+      var patterns = ['focus','surfsight','lytx','netradyne','smartwitness','drivecam','samsara','mobileye','camera','dashcam','ai-12','ai12'];
+      for (var i = 0; i < patterns.length; i++) {
+        if (type.includes(patterns[i]) || name.includes(patterns[i])) return true;
+      }
+      return false;
+    }
+
+    function getCameraLabel(device) {
+      var type = (device.deviceType || '').toLowerCase();
+      var name = (device.name || '').toLowerCase();
+      if (type.includes('focusplus') || type.includes('focus plus') || name.includes('focus plus') || name.includes('focusplus')) return 'GO Focus Plus';
+      if (type.includes('surfsight') || name.includes('surfsight') || name.includes('ai-12') || name.includes('ai12')) return 'Surfsight';
+      if (type.includes('lytx') || name.includes('lytx')) return 'Lytx';
+      return 'Other Camera';
+    }
+
+    function getMakeFromVIN(vin) {
+      if (!vin || vin.length < 3) return null;
+      var wmi = vin.substring(0,3).toUpperCase();
+      return WMI_MAP[wmi] || null;
+    }
+
+    function getMakeModel(device) {
+      var make = device.make || '';
+      var model = device.model || '';
+      if (make || model) return (make + ' ' + model).trim();
+      var vin = device.vehicleIdentificationNumber || device.engineVehicleIdentificationNumber || '';
+      if (vin && vin.length >= 3 && vin !== '?' && vin !== 'N/A') {
+        var makeFromVin = getMakeFromVIN(vin);
+        if (makeFromVin) return makeFromVin;
+      }
+      return 'Unknown Asset';
+    }
+
+    function normalizeDeviceType(type) {
+      var map = {'GO9':'GO9','GO9B':'GO9B','GoAnywhere':'GO Anywhere','GO8':'GO8','GO7':'GO7','GO6':'GO6','CustomDevice':'Custom','None':'Unknown'};
+      return map[type] || type;
+    }
+
     function classifyDevice(device) {
       var name = (device.name || '').toLowerCase();
       var type = (device.deviceType || '').toLowerCase();
@@ -204,100 +191,124 @@
       return 'vehicle';
     }
 
-    function getMakeModel(device) {
-      var parts = [];
-      if (device.make)  parts.push(device.make);
-      if (device.model) parts.push(device.model);
-      return parts.join(' ') || 'Unknown Asset';
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function getCameraSystem(device) {
-      // Camera info isn't a native Device field — check name/comment as a heuristic.
-      // Update this logic if your database uses a custom field for camera type.
-      var haystack = ((device.name || '') + ' ' + (device.comment || '')).toLowerCase();
-      if (haystack.indexOf('surfsight') !== -1) return 'Surfsight';
-      if (haystack.indexOf('focus plus') !== -1 || haystack.indexOf('focusplus') !== -1) return 'GO Focus Plus';
-      if (haystack.indexOf('focus') !== -1) return 'GO Focus';
-      if (haystack.indexOf('lytx') !== -1) return 'Lytx';
-      return 'No Camera';
-    }
-
-    // ── Main add-in ─────────────────────────────────────────────────
     geotab.addin['composition'] = function() {
-      var _api;
-      var _allDevices  = [];
-      var _showVehicles = true;
-      var _showTrailers = true;
-      var _readyOnly    = false;
+      var _api, _allDevices = [], _showVehicles = true, _showTrailers = true, _readyOnly = false;
+      var _activeFilter = null; // { chartType, label }
+      var _charts = {};
 
       function apiGet(typeName, search) {
         return new Promise(function(resolve, reject) {
-          dbg('GET ' + typeName + (search ? ' search=' + JSON.stringify(search) : ''));
-          _api.call('Get', { typeName: typeName, search: search || {} },
-            function(result) {
-              dbg('  ✓ ' + (result || []).length + ' ' + typeName + ' records');
-              resolve(result || []);
-            },
-            function(err) {
-              dbg('  ✗ ' + typeName + ' ERROR: ' + err);
-              reject(err);
-            }
+          dbg('GET '+typeName+(search?' search='+JSON.stringify(search):''));
+          _api.call('Get', {typeName:typeName, search:search||{}},
+            function(r) { dbg('  ✓ '+(r||[]).length+' records'); resolve(r||[]); },
+            function(e) { dbg('  ✗ ERROR: '+e); reject(e); }
           );
         });
       }
 
-      function getVisibleDevices() {
-        return _allDevices.filter(function(d) {
+      function renderPie(canvasId, counts, chartType) {
+        if (_charts[canvasId]) _charts[canvasId].destroy();
+        var labels = Object.keys(counts);
+        var data = labels.map(function(k) { return counts[k]; });
+        if (labels.length === 0) { labels = ['No data']; data = [0]; }
+
+        _charts[canvasId] = new Chart(document.getElementById(canvasId), {
+          type: 'pie',
+          data: {
+            labels: labels,
+            datasets: [{ data:data, backgroundColor:PALETTE, borderWidth:2, borderColor:'#fff' }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            onClick: function(evt, elements, chart) {
+              if (elements.length === 0) return;
+              var idx = elements[0].index;
+              var label = chart.data.labels[idx];
+              handleSegmentClick(chartType, label);
+            },
+            plugins: {
+              legend: { position:'bottom', labels:{ font:{family:Z.font,size:12}, color:Z.textPrimary, padding:12, boxWidth:12 } },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    var total = ctx.dataset.data.reduce(function(a,b){return a+b;},0);
+                    var pct = total>0 ? Math.round(ctx.parsed/total*100) : 0;
+                    return ' '+ctx.label+': '+ctx.parsed+' ('+pct+'%)';
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+
+      function handleSegmentClick(chartType, label) {
+        dbg('Segment clicked: '+chartType+' = '+label);
+        _activeFilter = { chartType: chartType, label: label };
+        renderDeviceList();
+      }
+
+      function getFilteredDevices() {
+        var devices = _allDevices.filter(function(d) {
           var cls = classifyDevice(d);
           if (cls === 'trailer' && !_showTrailers) return false;
           if (cls === 'vehicle' && !_showVehicles) return false;
           if (_readyOnly && d.isActive === false) return false;
           return true;
         });
+
+        if (!_activeFilter) return [];
+
+        var chartType = _activeFilter.chartType;
+        var label = _activeFilter.label;
+
+        if (chartType === 'makemodel') {
+          return devices.filter(function(d) { return !isCameraDevice(d) && getMakeModel(d) === label; });
+        } else if (chartType === 'hardware') {
+          return devices.filter(function(d) { return !isCameraDevice(d) && normalizeDeviceType(d.deviceType||'Unknown') === label; });
+        } else if (chartType === 'camera') {
+          if (label === 'No Camera') {
+            var trackers = devices.filter(function(d) { return !isCameraDevice(d); });
+            var cameras = devices.filter(function(d) { return isCameraDevice(d); });
+            var uncamCount = Math.max(0, trackers.length - cameras.length);
+            return trackers.slice(0, uncamCount);
+          } else {
+            return devices.filter(function(d) { return isCameraDevice(d) && getCameraLabel(d) === label; });
+          }
+        }
+        return [];
       }
 
-      function render() {
-        var devices = getVisibleDevices();
-        dbg('Rendering ' + devices.length + ' visible device(s)');
-
-        // Show layout sections
-        var chartsRow = document.getElementById('charts-row');
-        chartsRow.style.display = 'grid';
-        document.getElementById('section-divider').style.display = 'block';
-        document.getElementById('loading-msg').style.display = 'none';
-
-        // ── Build chart data ─────────────────────────────────────
-        var makeModelCounts = {};
-        var hwCounts        = {};
-        var cameraCounts    = {};
-
-        devices.forEach(function(d) {
-          var mm  = getMakeModel(d);
-          var hw  = d.deviceType || 'Unknown';
-          var cam = getCameraSystem(d);
-
-          makeModelCounts[mm]  = (makeModelCounts[mm]  || 0) + 1;
-          hwCounts[hw]         = (hwCounts[hw]         || 0) + 1;
-          cameraCounts[cam]    = (cameraCounts[cam]    || 0) + 1;
-        });
-
-        renderPie('chart-make-model', makeModelCounts);
-        renderPie('chart-hardware',   hwCounts);
-        renderPie('chart-camera',     cameraCounts);
-
-        // ── Build device list ────────────────────────────────────
+      function renderDeviceList() {
         var container = document.getElementById('device-list');
+        var filterHeader = document.getElementById('filter-header');
+        var filterLabel = document.getElementById('filter-label');
+
+        if (!_activeFilter) {
+          container.style.display = 'none';
+          filterHeader.style.display = 'none';
+          return;
+        }
+
+        var devices = getFilteredDevices();
+        filterHeader.style.display = 'block';
+        container.style.display = 'block';
+        filterLabel.textContent = 'Showing: ' + _activeFilter.label + ' (' + devices.length + ')';
         container.innerHTML = '';
 
         if (devices.length === 0) {
           var empty = document.createElement('div');
           empty.className = 'empty-state';
-          empty.textContent = 'No devices match the current filters.';
+          empty.textContent = 'No devices match this filter.';
           container.appendChild(empty);
           return;
         }
 
-        // Group by hardware type
         var groups = {};
         devices.forEach(function(d) {
           var key = d.deviceType || 'Unknown';
@@ -307,7 +318,6 @@
 
         Object.keys(groups).sort().forEach(function(hw) {
           var group = groups[hw];
-
           var groupEl = document.createElement('div');
           groupEl.className = 'hw-group';
 
@@ -321,113 +331,144 @@
 
           group.forEach(function(d) {
             var vin = d.vehicleIdentificationNumber || '?';
-            var sn  = d.serialNumber || '—';
-
+            var sn = d.serialNumber || '—';
             var card = document.createElement('div');
             card.className = 'device-card';
             card.innerHTML =
-              '<div class="device-card-name">' + escHtml(d.name || 'Unnamed') + '</div>' +
-              '<div class="device-card-row"><b>HW:</b> ' + escHtml(hw) + '</div>' +
-              '<div class="device-card-row"><b>VIN:</b> ' + escHtml(vin) + '</div>' +
-              '<div class="device-card-row"><b>SN:</b> ' + escHtml(sn) + '</div>';
+              '<div class="device-card-name">'+escHtml(d.name||'Unnamed')+'</div>'+
+              '<div class="device-card-row"><b>HW:</b> '+escHtml(hw)+'</div>'+
+              '<div class="device-card-row"><b>VIN:</b> '+escHtml(vin)+'</div>'+
+              '<div class="device-card-row"><b>SN:</b> '+escHtml(sn)+'</div>';
             cardsEl.appendChild(card);
           });
 
           groupEl.appendChild(cardsEl);
           container.appendChild(groupEl);
         });
+      }
 
-        dbg('Rendered ' + Object.keys(groups).length + ' hardware group(s)');
+      function render() {
+        var devices = _allDevices.filter(function(d) {
+          var cls = classifyDevice(d);
+          if (cls === 'trailer' && !_showTrailers) return false;
+          if (cls === 'vehicle' && !_showVehicles) return false;
+          if (_readyOnly && d.isActive === false) return false;
+          return true;
+        });
+
+        dbg('Rendering '+devices.length+' visible devices');
+        document.getElementById('charts-row').style.display = 'grid';
+        document.getElementById('loading-msg').style.display = 'none';
+
+        // Separate trackers vs cameras
+        var trackers = devices.filter(function(d) { return !isCameraDevice(d); });
+        var cameras = devices.filter(function(d) { return isCameraDevice(d); });
+
+        // Make/Model (trackers only)
+        var makeModelCounts = {};
+        trackers.forEach(function(d) {
+          var mm = getMakeModel(d);
+          makeModelCounts[mm] = (makeModelCounts[mm] || 0) + 1;
+        });
+
+        // Hardware (trackers only)
+        var hwCounts = {};
+        trackers.forEach(function(d) {
+          var hw = normalizeDeviceType(d.deviceType || 'Unknown');
+          hwCounts[hw] = (hwCounts[hw] || 0) + 1;
+        });
+
+        // Camera Systems
+        var cameraCounts = {};
+        cameras.forEach(function(d) {
+          var cam = getCameraLabel(d);
+          cameraCounts[cam] = (cameraCounts[cam] || 0) + 1;
+        });
+        var uncamCount = Math.max(0, trackers.length - cameras.length);
+        if (uncamCount > 0) cameraCounts['No Camera'] = uncamCount;
+
+        renderPie('chart-make-model', makeModelCounts, 'makemodel');
+        renderPie('chart-hardware', hwCounts, 'hardware');
+        renderPie('chart-camera', cameraCounts, 'camera');
+
+        renderDeviceList();
       }
 
       function loadData() {
         var loadEl = document.getElementById('loading-msg');
         loadEl.style.display = 'block';
-        loadEl.textContent   = 'Loading fleet data…';
+        loadEl.textContent = 'Loading fleet data…';
         document.getElementById('charts-row').style.display = 'none';
-        document.getElementById('section-divider').style.display = 'none';
-        document.getElementById('device-list').innerHTML = '';
+        document.getElementById('device-list').style.display = 'none';
+        document.getElementById('filter-header').style.display = 'none';
 
         dbg('────────────────────────────');
         dbg('loadData() triggered');
 
-        apiGet('Device').then(function(devices) {
-          _allDevices = devices;
-          dbg('Total devices loaded: ' + _allDevices.length);
+        apiGet('GoDevice').then(function(devices) {
+          // Filter: tracked only, exclude archived/old
+          _allDevices = devices.filter(function(d) {
+            if (!hasValidSerialNumber(d)) { dbg('Exclude (no SN): '+d.name); return false; }
+            if (d.deviceType === 'OldGeotab') { dbg('Exclude (OldGeotab): '+d.name); return false; }
+            if (d.isActive === false) { dbg('Exclude (inactive): '+d.name); return false; }
+            return true;
+          });
+          dbg('Loaded '+_allDevices.length+' tracked devices (filtered from '+devices.length+' total)');
           render();
         }).catch(function(err) {
-          loadEl.textContent = 'Error loading data: ' + err;
-          dbg('FATAL: ' + err);
+          loadEl.textContent = 'Error loading data: '+err;
+          dbg('FATAL: '+err);
         });
       }
 
-      function escHtml(str) {
-        return String(str)
-          .replace(/&/g,  '&amp;')
-          .replace(/</g,  '&lt;')
-          .replace(/>/g,  '&gt;')
-          .replace(/"/g,  '&quot;');
-      }
-
-      // ── Lifecycle ──────────────────────────────────────────────────
       return {
         initialize: function(api, state, callback) {
           _api = api;
           injectStyles();
           dbg('initialize() called');
+          api.getSession(function(s) { dbg('Session: '+s.userName+' @ '+s.database); });
 
-          // Log session context
-          api.getSession(function(session) {
-            dbg('Session: ' + session.userName + ' @ ' + session.database);
-          });
-
-          // Filter: Vehicles checkbox
           document.getElementById('chk-vehicles').onchange = function() {
             _showVehicles = this.checked;
             if (_allDevices.length) render();
           };
 
-          // Filter: Trailers checkbox
           document.getElementById('chk-trailers').onchange = function() {
             _showTrailers = this.checked;
             if (_allDevices.length) render();
           };
 
-          // Filter: Ready toggle
           var readyBtn = document.getElementById('btn-ready');
           readyBtn.onclick = function() {
             _readyOnly = !_readyOnly;
-            // Zenith interactive highlight when active
             readyBtn.style.cssText = _readyOnly
-              ? 'border:none;border-radius:4px;padding:5px 16px;font-size:13px;cursor:pointer;' +
-                'background:#0069BF;color:#fff;font-weight:600;'
-              : 'background:none;border:1px solid #D9E1E8;border-radius:4px;padding:5px 16px;' +
-                'color:#0069BF;font-weight:600;font-size:13px;cursor:pointer;';
+              ? 'border:none;border-radius:4px;padding:5px 16px;font-size:13px;cursor:pointer;background:#0069BF;color:#fff;font-weight:600;'
+              : 'background:none;border:1px solid #D9E1E8;border-radius:4px;padding:5px 16px;color:#0069BF;font-weight:600;font-size:13px;cursor:pointer;';
             if (_allDevices.length) render();
           };
 
-          // Debug: toggle log
+          document.getElementById('btn-clear-filter').onclick = function() {
+            _activeFilter = null;
+            renderDeviceList();
+          };
+
           document.getElementById('btn-toggle-debug').onclick = function() {
             var log = document.getElementById('debug-log');
             log.style.display = (log.style.display === 'none') ? 'block' : 'none';
           };
 
-          // Debug: copy data
           document.getElementById('btn-copy-debug').onclick = function() {
             var text = _debugLines.join('\n');
             if (navigator.clipboard) {
-              navigator.clipboard.writeText(text).then(function() {
-                dbg('Debug data copied to clipboard');
-              });
+              navigator.clipboard.writeText(text).then(function() { dbg('Copied to clipboard'); });
             } else {
-              // Fallback for older browsers
               var ta = document.createElement('textarea');
               ta.value = text;
               document.body.appendChild(ta);
               ta.select();
               document.execCommand('copy');
               document.body.removeChild(ta);
-              dbg('Debug data copied (fallback)');
+              dbg('Copied (fallback)');
             }
           };
 

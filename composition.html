@@ -405,7 +405,7 @@
         dbg('────────────────────────────');
         dbg('loadData() triggered');
 
-        apiGet('GoDevice').then(function(devices) {
+        apiGet('Device').then(function(devices) {
           // Filter: tracked only, exclude archived/old
           _allDevices = devices.filter(function(d) {
             if (!hasValidSerialNumber(d)) { dbg('Exclude (no SN): '+d.name); return false; }

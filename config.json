@@ -1,0 +1,15 @@
+{
+    "name": "Fleet Technology Dashboard v2.6",
+    "supportEmail": "https://github.com/tylerscottGT/myg-fleet-breakdown",
+    "version": "2.6",
+    "items": [
+        {
+            "url": "https://raw.githubusercontent.com/tylerscottGT/myg-fleet-breakdown/main/composition.html",
+            "path": "ActivityLink",
+            "menuName": {
+                "en": "Fleet Breakdown"
+            }
+        }
+    ],
+    "isSigned": false
+}
